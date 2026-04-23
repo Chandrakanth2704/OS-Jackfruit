@@ -168,7 +168,7 @@ sudo rmmod monitor
 
 ### 1. Multi-container Supervision
 
-![img](./screenshots/Screenshot1.png)
+<img width="1358" height="214" alt="image" src="https://github.com/user-attachments/assets/a85f35aa-7fb5-404b-b007-7637c041e950" />
 
 This screenshot shows two containers (alpha and beta) successfully started and listed using the `engine ps` command, confirming that both are running simultaneously under a single supervisor process.
 
@@ -176,7 +176,7 @@ This screenshot shows two containers (alpha and beta) successfully started and l
 
 ### 2. Metadata Tracking
 
-![img](./screenshots/Screenshot2.png)
+<img width="763" height="106" alt="image" src="https://github.com/user-attachments/assets/23c2a792-b940-46f6-991b-f76514a4cfcf" />
 
 The `engine ps` output displays container metadata including PID, state, uptime, and memory limits, confirming that the supervisor is correctly tracking all running containers.
 
@@ -184,7 +184,7 @@ The `engine ps` output displays container metadata including PID, state, uptime,
 
 ### 3. Bounded-buffer Logging
 
-![img](./screenshots/Screenshot3.png)
+<img width="846" height="287" alt="image" src="https://github.com/user-attachments/assets/a2a9cce0-8e87-42e9-8d60-78a130d8abda" />
 
 This screenshot shows logs retrieved using the `engine logs` command, demonstrating that container output is captured and stored through the bounded-buffer logging pipeline with proper synchronization.
 
@@ -192,7 +192,7 @@ This screenshot shows logs retrieved using the `engine logs` command, demonstrat
 
 ### 4. CLI and IPC
 
-![img](./screenshots/Screenshot4.png)
+<img width="1350" height="55" alt="image" src="https://github.com/user-attachments/assets/6ddaaad7-1bea-4f1d-be78-862b1b82fab6" />
 
 This screenshot demonstrates a CLI command (`engine start gamma`) interacting with the supervisor, confirming successful inter-process communication through the control channel.
 
@@ -200,7 +200,7 @@ This screenshot demonstrates a CLI command (`engine start gamma`) interacting wi
 
 ### 5. Soft-limit Warning
 
-![img](./screenshots/Screenshot5.png)
+<img width="1411" height="68" alt="image" src="https://github.com/user-attachments/assets/344142c9-d0f5-4267-b263-9b063be91e4a" />
 
 Kernel logs show a soft-limit warning when memory usage exceeds the configured threshold, while the container continues execution.
 
@@ -208,7 +208,7 @@ Kernel logs show a soft-limit warning when memory usage exceeds the configured t
 
 ### 6. Hard-limit Enforcement
 
-![img](./screenshots/Screenshot6.png)
+<img width="1411" height="130" alt="image" src="https://github.com/user-attachments/assets/5a0c4fb2-809b-49e0-a0c0-f261bde85326" />
 
 The kernel terminates the container after exceeding the hard memory limit, and logs confirm that the container was killed and enforcement was applied.
 
@@ -216,7 +216,7 @@ The kernel terminates the container after exceeding the hard memory limit, and l
 
 ### 7. Scheduling Experiment
 
-![img](./screenshots/Screenshot7.png)
+<img width="1026" height="788" alt="image" src="https://github.com/user-attachments/assets/79777a19-b845-48ed-85f3-99632bc135a6" />
 
 CPU-bound (`cpu_hog`) and I/O-bound (`io_pulse`) workloads run concurrently, demonstrating how the scheduler distributes CPU time based on workload characteristics.
 
@@ -224,7 +224,7 @@ CPU-bound (`cpu_hog`) and I/O-bound (`io_pulse`) workloads run concurrently, dem
 
 ### 8. Clean Teardown
 
-![img](./screenshots/Screenshot8.png)
+<img width="1298" height="162" alt="image" src="https://github.com/user-attachments/assets/75c4cb80-0823-4210-a7a1-380c0c7b5184" />
 
 The absence of defunct processes confirms that all containers were properly terminated and no zombie processes remain.
 
@@ -233,88 +233,105 @@ The absence of defunct processes confirms that all containers were properly term
 ## 4. Engineering Analysis
 
 ### Isolation Mechanisms
+The runtime uses Linux namespaces (PID, UTS, and mount) to isolate containers.
 
-Linux namespaces (PID, UTS, and mount) are used to isolate containers. PID namespaces prevent processes from interacting across containers, UTS namespaces provide separate hostnames, and mount namespaces isolate filesystem views. The host kernel is still shared.
+- PID namespace ensures process isolation between containers  
+- UTS namespace allows each container to have its own hostname  
+- Mount namespace provides an isolated filesystem view  
+
+All containers share the host kernel, making this a lightweight virtualization approach.
 
 ---
 
 ### Supervisor and Process Lifecycle
+A single supervisor process manages the entire container lifecycle.
 
-The supervisor manages container creation, tracks metadata, and handles termination signals. It uses `waitpid()` to clean up child processes and prevent zombie processes.
+- Creates containers using clone()  
+- Tracks container metadata such as PID, state, and limits  
+- Handles termination signals (SIGTERM and SIGKILL)  
+- Uses waitpid() to clean up child processes  
+
+This ensures proper cleanup and prevents zombie processes.
 
 ---
 
 ### IPC, Threads, and Synchronization
+Two IPC mechanisms are used in the system:
 
-Pipes are used for logging, and a control channel is used for CLI communication. A bounded buffer with mutexes and condition variables ensures safe concurrent logging without race conditions.
+- Pipes are used to capture container stdout and stderr for logging  
+- A control channel (UNIX socket or FIFO) is used for communication between CLI and supervisor  
+
+A bounded buffer is implemented using mutex locks and condition variables to ensure thread-safe logging and avoid race conditions.
 
 ---
 
 ### Memory Management and Enforcement
+Memory usage is monitored using RSS (Resident Set Size).
 
-RSS measures physical memory usage. Soft limits generate warnings, while hard limits enforce termination. Enforcement is done in kernel space for accuracy and safety.
+- Soft limit generates warning messages when exceeded  
+- Hard limit enforces termination using SIGKILL  
+
+Enforcement is performed in kernel space to ensure accuracy and reliability.
 
 ---
 
 ### Scheduling Behavior
+The system relies on the Linux Completely Fair Scheduler (CFS).
 
-The Completely Fair Scheduler distributes CPU time fairly. CPU-bound tasks consume more CPU, while I/O-bound tasks yield CPU frequently.
+- CPU time is distributed fairly among processes  
+- CPU-bound processes continuously consume CPU  
+- I/O-bound processes frequently yield CPU while waiting  
+
+This demonstrates practical scheduling behavior in Linux systems.
 
 ---
 
-## 5. Design Decisions and Tradeoffs
+## 5. Design Decisions and Trade-offs
 
 ### Namespace Isolation
-
-Choice: PID, UTS, mount namespaces
-Tradeoff: No network isolation
-Justification: Focuses on core container isolation concepts
+Choice: PID, UTS, and mount namespaces  
+Trade-off: No network isolation  
+Justification: Focus on core container isolation concepts while keeping the implementation simple
 
 ---
 
 ### Supervisor Architecture
-
-Choice: Single supervisor process
-Tradeoff: Single point of failure
-Justification: Simplifies management and coordination
+Choice: Single supervisor process  
+Trade-off: Single point of failure  
+Justification: Simplifies container management and coordination
 
 ---
 
 ### IPC and Logging
-
-Choice: Pipes with bounded buffer
-Tradeoff: Synchronization complexity
+Choice: Pipes with bounded buffer  
+Trade-off: Synchronization complexity  
 Justification: Ensures reliable logging without data loss
 
 ---
 
 ### Kernel Monitor
-
-Choice: Kernel module with periodic checks
-Tradeoff: Slight delay in enforcement
-Justification: Simpler and stable implementation
+Choice: Kernel module with periodic checks  
+Trade-off: Slight delay in enforcement  
+Justification: Provides a simple and stable monitoring mechanism
 
 ---
 
 ## 6. Scheduler Experiment Results
 
-### Experiment: CPU-bound vs I/O-bound
+### Experiment: CPU-bound vs I/O-bound workloads
 
-| Workload | Observed Behavior                    |
-| -------- | ------------------------------------ |
-| cpu_hog  | Continuous execution (~1 update/sec) |
-| io_pulse | Periodic output due to I/O waits     |
-
----
+| Workload   | Observed Behavior                          |
+|------------|--------------------------------------------|
+| cpu_hog    | Continuous execution (approximately steady CPU usage) |
+| io_pulse   | Periodic output due to I/O wait operations |
 
 ### Observation
-
-CPU-bound processes utilize CPU continuously, while I/O-bound processes frequently yield. The scheduler balances fairness and responsiveness.
+CPU-bound processes utilize CPU continuously, while I/O-bound processes frequently yield CPU. The scheduler balances fairness and responsiveness effectively.
 
 ---
 
 ## Conclusion
 
-This project demonstrates container runtime implementation, process isolation, kernel monitoring, IPC mechanisms, and scheduling behavior in Linux.
+This project demonstrates the implementation of a container runtime, including process isolation using namespaces, kernel-level memory monitoring, inter-process communication, and scheduling behavior in Linux systems.
 
 ---
